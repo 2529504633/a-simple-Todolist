@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- 定义文档的字符编码和视口设置 -->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Todo List</title>
+  <!-- 引入样式表 -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- 页面标题 -->
+<h1>Todo List</h1>
+
+<!-- 新Todo输入框和添加按钮 -->
+<input type="text" id="newTodoInput" placeholder="Add a new todo">
+<button id="addTodoButton">Add</button>
+
+<!-- 用于显示Todo列表的无序列表 -->
+<ul id="todosList" class="todo-list">
+  <!-- Todo项目将在这里动态添加 -->
+</ul>
+
+<!-- 编辑模态框 -->
+<div id="editModal" class="modal">
+  <div class="modal-content">
+    <!-- 关闭模态框的按钮 -->
+    <span class="close">&times;</span>
+    <!-- 用于编辑Todo的输入框 -->
+    <input type="text" id="editTodoInput" placeholder="Edit your todo">
+    <div class="parent-container">
+      <!-- 保存编辑的按钮 -->
+      <button id="saveEditButton">Save</button>
+      <!-- 取消编辑的按钮 -->
+      <button id="cancelEditButton">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// 从服务器获取Todo列表
+function fetchTodos() {
+  // 发起GET请求获取todos
+  fetch('/api/todos')
+    .then(response => response.json())
+    .then(todos => {
+      const list = document.getElementById('todosList');
+      // 清空列表
+      list.innerHTML = '';
+      // 遍历todos，动态添加到列表中
+      todos.forEach(todo => {
+        // 创建新的列表项
+        const item = document.createElement('li');
+        item.className = 'todo-item';
+        item.textContent = todo.task;
+        // 如果todo已完成，则添加completed类
+        todo.completed && item.classList.add('completed');
+
+        // 创建按钮容器
+        const buttonsContainer = document.createElement('div');
+        buttonsContainer.className = 'todo-item-actions';
+
+        // 创建完成/未完成按钮
+        const completeButtonText = todo.completed ? 'Incomplete' : 'Complete';
+        const completeButton = document.createElement('button');
+        completeButton.textContent = completeButtonText;
+        completeButton.onclick = () => completeTodo(todo.id);
+        buttonsContainer.appendChild(completeButton);
+
+        // 创建编辑按钮
+        const editButton = document.createElement('button');
+        editButton.textContent = 'Edit';
+        editButton.onclick = () => editTodo(todo.id, todo.task);
+        buttonsContainer.appendChild(editButton);
+
+        // 创建删除按钮
+        const deleteButton = document.createElement('button');
+        deleteButton.textContent = 'Delete';
+        deleteButton.onclick = () => deleteTodo(todo.id);
+        buttonsContainer.appendChild(deleteButton);
+
+        // 将按钮容器添加到列表项中
+        item.appendChild(buttonsContainer);
+        // 将列表项添加到列表中
+        list.appendChild(item);
+      });
+    })
+    .catch(error => console.error('Error fetching todos:', error));
+}
+
+// 标记Todo为完成状态
+function completeTodo(todoId) {
+  // 发起PATCH请求更新todo的完成状态
+  fetch(`/api/todos/${todoId}/completed`, { method: 'PATCH' })
+    .then(response => {
+      if (!response.ok) throw new Error('Network response was not ok');
+      return response.json();
+    })
+    .then(() => fetchTodos())
+    .catch(error => console.error('Error marking todo as complete:', error));
+}
+
+// 添加新的Todo
+function addTodo() {
+  const input = document.getElementById('newTodoInput');
+  const task = input.value.trim();
+  if (task) {
+    // 发起POST请求添加新的todo
+    fetch('/api/todos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task })
+    })
+    .then(() => {
+      // 清空输入框
+      input.value = '';
+      // 重新获取todos列表
+      fetchTodos();
+    })
+    .catch(error => console.error('Error adding todo:', error));
+  }
+}
+
+// 编辑Todo
+function editTodo(todoId, todoTask) {
+  // 获取模态框元素
+  const modal = document.getElementById('editModal');
+  const input = document.getElementById('editTodoInput');
+  const saveButton = document.getElementById('saveEditButton');
+  const cancelButton = document.getElementById('cancelEditButton');
+  const span = document.getElementsByClassName("close")[0];
+
+  // 设置输入框的值为当前Todo任务
+  input.value = todoTask;
+  // 显示模态框
+  modal.style.display = "block";
+
+  // 保存编辑的逻辑
+  saveButton.onclick = () => {
+    const newTask = input.value.trim();
+    if (newTask) {
+      // 更新Todo
+      updateTodo(todoId, newTask);
+      // 隐藏模态框
+      modal.style.display = "none";
+    }
+  };
+
+  // 取消编辑的逻辑
+  cancelButton.onclick = () => {
+    modal.style.display = "none";
+  };
+
+  // 点击关闭按钮的逻辑
+  span.onclick = () => {
+    modal.style.display = "none";
+  };
+
+  // 按下Enter键时保存编辑
+  document.getElementById('editTodoInput').addEventListener('keydown', event => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      saveButton.click();
+    }
+  });
+}
+
+// 更新Todo任务
+function updateTodo(todoId, newTask) {
+  // 发起PUT请求更新todo任务
+  fetch(`/api/todos/${todoId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task: newTask, completed: false })
+  })
+  .then(response => {
+    if (!response.ok) throw new Error('Network response was not ok: ' + response.statusText);
+    return response.json();
+  })
+  .then(() => fetchTodos())
+  .catch(error => console.error('Error updating todo:', error));
+}
+
+// 删除Todo
+function deleteTodo(todoId) {
+  // 发起DELETE请求删除todo
+  fetch(`/api/todos/${todoId}`, { method: 'DELETE' })
+    .then(() => fetchTodos())
+    .catch(error => console.error('Error deleting todo:', error));
+}
+
+// 为添加按钮添加点击事件
+document.getElementById('addTodoButton').addEventListener('click', addTodo);
+// 为输入框添加键盘事件，按Enter键添加Todo
+document.getElementById('newTodoInput').addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    addTodo();
+  }
+});
+
+// 页面加载时获取Todo列表
+fetchTodos();
+</script>
+
+</body>
+</html>
